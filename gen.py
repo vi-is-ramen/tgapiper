@@ -31,9 +31,9 @@ def gen():
     
     for ttype in data["types"].values():
         with open("tg/types/" + ttype["name"] + ".py", "w") as f:
-            s =  "from dataclasses import dataclass\n"
+            s =  "from ..base_type import base_type\n"
             s += "from typing import Optional\n"
-            s += "\n@dataclass\n"
+            s += "\n@base_type\n"
 
             used_types = set()
 
@@ -364,6 +364,10 @@ def gen():
             s += f"    '{method['name']}',\n"
         s += ")\n"
         f.write(s)
+    
+    with open("tg/base_type.py", "w") as f:
+        with open("base_type.py", "r") as g:
+            f.write(g.read())
     
     with open("tg/methods/BaseMethod.py", "w") as f:
         f.write(base_method)
