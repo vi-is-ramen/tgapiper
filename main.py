@@ -47,4 +47,10 @@ if __name__ == "__main__":
         if filename.endswith(".py"):
             nmethods += 1
 
-    print(f"Done, generated {ntypes-1} types and {nmethods-1} methods!")
+    print(f"Generated {ntypes-1} types and {nmethods-1} methods")
+
+    print("Testing...")
+
+    import test
+
+    print("Done")

@@ -27,10 +27,13 @@ def gen():
     with open("api.min.json", "r") as f:
         data = json.load(f)
 
+    x_used_types = {}
     
     for ttype in data["types"].values():
         with open("tg/types/" + ttype["name"] + ".py", "w") as f:
-            s = "from dataclasses import dataclass\n\n@dataclass\n"
+            s =  "from dataclasses import dataclass\n"
+            s += "from typing import Optional\n"
+            s += "\n@dataclass\n"
 
             used_types = set()
 
@@ -52,6 +55,10 @@ def gen():
                 f.write(s)
                 continue
             
+            fields = []
+
+            x_used_types[tname] = set()
+
             for field in ttype["fields"]:
                 fname = field["name"]
                 ftypes = field["types"]
@@ -62,7 +69,7 @@ def gen():
                 if fname == 'from':
                     fname = 'from_'
 
-                s += f"    {fname}: "
+                _s = f"    {fname}: "
 
                 ptype = ""
 
@@ -82,11 +89,11 @@ def gen():
                             btype = "bool"
                         elif btype == "String":
                             btype = "str"
-                        elif btype == "True":
-                            default = "False"
-                            btype = "bool"
                         else:
                             used_types.add(btype)
+                            x_used_types[tname].add(btype)
+                            if dtype in x_used_types and tname in x_used_types[dtype]:
+                                btype = f"'{btype}'"
 
                         dtype = "list[" * level + btype + "]" * level
                     else:
@@ -99,9 +106,13 @@ def gen():
                         elif dtype == "String":
                             dtype = "str"
                         elif dtype == "True":
+                            default = "False"
                             dtype = "bool"
                         else:
                             used_types.add(dtype)
+                            x_used_types[tname].add(dtype)
+                            if dtype in x_used_types and tname in x_used_types[dtype]:
+                                dtype = f"'{dtype}'"
                     
                     ptype += dtype + " |"
                 
@@ -111,23 +122,34 @@ def gen():
                     if ptype == "bool":
                         default = "False"
                     else:
-                        ptype += " | None"
+                        ptype = f"Optional[{ptype}]"
                         default = "None"
                 
                 if default:
                     ptype += f" = {default}"
                 
-                s += ptype
+                _s += ptype
                 
-                s += "\n"
+                _s += "\n"
 
                 if type(fdesc) == list:
                     fdesc = "\n".join(fdesc)
                 
-                s += f"    '''\n    {fdesc}\n    '''\n\n"
+                _s += f"    '''\n    {fdesc}\n    '''\n\n"
 
                 for ut in used_types:
-                    s = f"from .{ut} import {ut}\n" + s
+                    if ut in x_used_types and tname in x_used_types[ut]:
+                        s = f"# from .{ut} import {ut}\n" + s + "  # avoid circular import\n"
+                    else:
+                        s = f"from .{ut} import {ut}\n" + s
+                
+                if default:
+                    fields.append(_s)
+                else:
+                    fields = [_s, *fields]
+            
+            for field in fields:
+                s += field
         
             f.write(s)
 
@@ -141,16 +163,9 @@ def gen():
             tname = method["name"]
             tdesc = "\n    ".join(method["description"]) if type(method[
                 "description"]) == list else method["description"]
-
-            s += f"class {tname}(BaseMethod):\n"
-            s += f"    '''\n    {tdesc}\n    '''\n\n"
-            s += f"    async def __call__(self,\n"
+            fields = []
             
-            if "fields" not in method:
-                s = s[:-1] + "):\n"
-                f.write(s)
-            else:
-                fields = []
+            if "fields" in method:
                 for i, field in enumerate(method["fields"]):
                     fname = field["name"]
                     ftypes = field["types"]
@@ -229,7 +244,6 @@ def gen():
                         fields.append(_s)
                     else:
                         fields = [_s, *fields]
-                s += "".join(fields)
             
             if "returns" in method:
                 rtype = ""
@@ -249,9 +263,6 @@ def gen():
                             btype = "bool"
                         elif btype == "String":
                             btype = "str"
-                        elif btype == "True":
-                            default = "False"
-                            btype = "bool"
                         else:
                             used_types.add(btype)
 
@@ -266,6 +277,7 @@ def gen():
                         elif dtype == "String":
                             dtype = "str"
                         elif dtype == "True":
+                            default = "False"
                             dtype = "bool"
                         else:
                             used_types.add(dtype)
@@ -275,6 +287,23 @@ def gen():
                 rtype = rtype[:-2]
             else:
                 rtype = "None"
+
+            if "fields" in method:
+                tdesc += "\n"
+                for field in method["fields"]:
+                    fname = field["name"]
+                    fdesc = "\n    ".join(field["description"]) if type(field["description"\
+                        ]) == list else field["description"]
+                    tdesc += f"    :param {fname}: {fdesc}\n"
+                    tdesc += f"    :type {fname}: {field['type']}\n"
+                tdesc += "    :return: {tdesc}\n"
+                    
+            
+            s += f"class {tname}(BaseMethod):\n"
+            s += f"    '''\n    {tdesc}\n    '''\n\n"
+            s += f"    async def __call__(self,\n"
+
+            s += "".join(fields)
         
             s += "    ) -> " + rtype + ":\n"
 
